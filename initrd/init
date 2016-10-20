@@ -125,7 +125,7 @@ debug_shell()
 	fi
 }
 
-echo -n Detecting Android-x86...
+echo -n Detecting AICP-x86...
 
 [ -z "$SRC" -a -n "$BOOT_IMAGE" ] && SRC=`dirname $BOOT_IMAGE`
 

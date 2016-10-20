@@ -102,7 +102,7 @@ select_dev()
 	} END {
 		printf("\"Create/Modify partitions\" \"\"\n\"Detect devices\" \"\"")
 	}' > $menufile
-	choose "Choose Partition" "Please select a partition to install Android-x86:"
+	choose "Choose Partition" "Please select a partition to install AICP-x86:"
 	return $retval
 }
 
@@ -145,14 +145,14 @@ format_fs()
 		dialog --title " Confirm " --defaultno --yesno \
 			"\n You chose to format $1 to $choice.\n All data in that partition will LOSE.\n\n Are you sure to format the partition $1?" 10 51
 		[ $? -ne 0 ] && return 1
-		$cmd Android-x86 /dev/$1 | awk '{
+		$cmd AICP-x86 /dev/$1 | awk '{
 			# FIXME: very imprecise progress
 			if (match($0, "done"))
 				printf("%d\n", i+=33)
 		}' | progress_bar "Formatting" "Formatting partition $1..."
 	elif blkid /dev/$1 | grep -q ext[23]; then
 		dialog --clear --title " Warning " --yesno \
-			"\nYou chose to install android-x86 to an ext2/3 filesystem. We suggest you convert it to ext4 for better reliability and performance." 9 62
+			"\nYou chose to install AICP-x86 to an ext2/3 filesystem. We suggest you convert it to ext4 for better reliability and performance." 9 62
 		[ $? -eq 0 ] && convert_fs $1
 	fi
 }
@@ -170,10 +170,10 @@ create_menulst()
 	[ -n "$VESA" ] && vga=" vga=788 modeset=0"
 	echo -e "${GRUB_OPTIONS:-default=0\ntimeout=6\nsplashimage=/grub/android-x86.xpm.gz\n}root (hd0,$1)\n" > $menulst
 
-	create_entry "Android-x86 $VER" quiet $cmdline
-	create_entry "Android-x86 $VER (Debug mode)" $cmdline DEBUG=2
-	create_entry "Android-x86 $VER (Debug nomodeset)" nomodeset $cmdline DEBUG=2
-	create_entry "Android-x86 $VER (Debug video=LVDS-1:d)" video=LVDS-1:d $cmdline DEBUG=2
+	create_entry "AICP-x86 $VER" quiet $cmdline
+	create_entry "AICP-x86 $VER (Debug mode)" $cmdline DEBUG=2
+	create_entry "AICP-x86 $VER (Debug nomodeset)" nomodeset $cmdline DEBUG=2
+	create_entry "AICP-x86 $VER (Debug video=LVDS-1:d)" video=LVDS-1:d $cmdline DEBUG=2
 }
 
 create_winitem()
@@ -241,10 +241,10 @@ try_upgrade()
 	[ -d $1 ] && return
 	PREV_VERS="6.0-r1 6.0-rc2 6.0-rc1 5.1-rc1 4.4-r5 4.4-r4 4.4-r3 4.4-r2 4.4-r1 4.4-RC2 4.4-RC1 4.4-test 4.3-test 4.2-test 4.0-r1 4.0-RC2 4.0-RC1"
 	for v in $PREV_VERS; do
-		prev=hd/android-$v
+		prev=hd/AICP-$v
 		if [ -d $prev ]; then
 			dialog --title " Question " --yesno \
-				"\nAn older Android-x86 version $v is detected.\nWould you like to upgrade it?" 8 55
+				"\nAn older AICP-x86 version $v is detected.\nWould you like to upgrade it?" 8 55
 			if [ $? -eq 0 ]; then
 				mv $prev $1
 				rm -rf $1/data/dalvik-cache/* $1/data/system/wpa_supplicant
@@ -282,10 +282,11 @@ install_to()
 	done
 
 	fs=`cat /proc/mounts | grep /dev/$1 | awk '{ print $3 }'`
-	cmdline=`sed "s|\(initrd.*img\s*\)||; s|quiet\s*||; s|\(vga=\w\+\?\s*\)||; s|\(DPI=\w\+\?\s*\)||; s|\(INSTALL=\w\+\?\s*\)||; s|\(SRC=\S\+\?\s*\)||; s|\(DEBUG=\w\+\?\s*\)||; s|\(BOOT_IMAGE=\S\+\?\s*\)||" /proc/cmdline`
+	cmdline=`sed "s|\(initrd.*img\s*\)||; s|quiet\s*||; s|\(vga=\w\+\?\s*\)||; s|\(DPI=\w\+\?\s*\)||; s|\(INSTALL=\w\+\?\s*\)||; s|\(SRC=\S\+\?\s*\)||; s|\(DEBUG=\w\+\?\s*\)||; s|\(BOOT_IMAGE=\S\+\?\s*\)||; s|\(iso-scan/filename=\S\+\?\s*\)||;" /proc/cmdline`
 
-	asrc=android-$VER
-	dialog --title " Confirm " --no-label Skip --defaultno --yesno \
+	[ -n "$INSTALL_PREFIX" ] && asrc=$INSTALL_PREFIX || asrc=AICP-$VER
+	efi="`dmesg | grep EFI.VGA`"
+	[ -z "$efi" ] && dialog --title " Confirm " --no-label Skip --defaultno --yesno \
 		"\n Do you want to install boot loader GRUB?" 7 47
 	if [ $? -eq 0 ]; then
 		cp -af /grub /hd
@@ -299,7 +300,7 @@ install_to()
 		[ $? -ne 0 ] && return 255
 	fi
 
-	dialog --title " Confirm " --no-label Skip --defaultno --yesno \
+	[ -n "$efi" ] && dialog --title " Confirm " --no-label Skip --defaultno --yesno \
 		"\n Do you want to install EFI GRUB2?" 7 39
 	if [ $? -eq 0 ]; then
 		get_part_info $1
@@ -322,8 +323,8 @@ install_to()
 		mkdir -p /hd/boot/grub
 		grubcfg=/hd/boot/grub/grub.cfg
 		echo -e "set timeout=5\n\n" > $grubcfg
-		echo -e "menuentry \"Android-x86 $VER\" {\n\tsearch --set=root --file /$asrc/kernel\n\tlinux /$asrc/kernel quiet $cmdline \n\tinitrd /$asrc/initrd.img\n}" >> $grubcfg
-		echo -e "menuentry \"Android-x86 $VER (DEBUG mode)\" {\n\tsearch --set=root --file /$asrc/kernel\n\tlinux /$asrc/kernel $cmdline DEBUG=2\n\tinitrd /$asrc/initrd.img\n}" >> $grubcfg
+		echo -e "menuentry \"AICP-x86 $VER\" {\n\tsearch --set=root --file /$asrc/kernel\n\tlinux /$asrc/kernel quiet $cmdline \n\tinitrd /$asrc/initrd.img\n}" >> $grubcfg
+		echo -e "menuentry \"AICP-x86 $VER (DEBUG mode)\" {\n\tsearch --set=root --file /$asrc/kernel\n\tlinux /$asrc/kernel $cmdline DEBUG=2\n\tinitrd /$asrc/initrd.img\n}" >> $grubcfg
 		if [ -e /hd/EFI/Microsoft/Boot/bootmgfw.efi ]; then
 			echo -e "menuentry \"Windows (UEFI)\" {\n\tsearch --set=root --file /EFI/Microsoft/Boot/bootmgfw.efi\n\tchainloader /EFI/Microsoft/Boot/bootmgfw.efi\n}" >> $grubcfg
 		fi
@@ -331,7 +332,7 @@ install_to()
 		try_mount rw /dev/$1 /hd
 	fi
 
-	dialog --title " Question " --yesno \
+	dialog --title " Question " --defaultno --yesno \
 		"\nDo you want to install /system directory as read-write?\n\nMaking /system be read-write is easier for debugging, but it needs more disk space and longer installation time." 10 61
 	instal_rw=$?
 
@@ -355,7 +356,7 @@ install_to()
 	cd hd/$asrc
 	rm -rf system*
 	( ( cd /; find $files | $CPIO -H newc -o ) | pv -ns ${size}k | ( $CPIO -iud > /dev/null; echo $? > /tmp/result )) 2>&1 \
-		| progress_bar "Installing Android-x86" "Expect to write $size KB..."
+		| progress_bar "Installing AICP-x86" "Expect to write $size KB..."
 	result=$((`cat /tmp/result`*255))
 
 	if [ $result -eq 0 ]; then
@@ -408,14 +409,14 @@ do_install()
 	until install_hd; do
 		if [ $retval -eq 255 ]; then
 			dialog --title ' Error! ' --yes-label Retry --no-label Reboot \
-				--yesno '\nInstallation failed! Please check if you have enough free disk space to install Android-x86.' 8 51
+				--yesno '\nInstallation failed! Please check if you have enough free disk space to install AICP-x86.' 8 51
 			[ $? -eq 1 ] && rebooting
 		fi
 	done
 
-	[ -n "$VESA" ] || runit="Run Android-x86"
+	[ -n "$VESA" ] || runit="Run AICP-x86"
 	dialog --clear --title ' Congratulations! ' \
-		--menu "\n Android-x86 is installed successfully.\n " 11 51 13 \
+		--menu "\n AICP-x86 is installed successfully.\n " 11 51 13 \
 		"$runit" "" "Reboot" "" 2> $tempfile
 	case "`cat $tempfile`" in
 		Run*)
